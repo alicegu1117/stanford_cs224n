@@ -64,7 +64,7 @@ class Trainer:
             self.model.load_state_dict(torch.load(self.config.ckpt_path))
 
     def train(self):
-        # self.load_checkpoint()
+        self.load_checkpoint()
         model, config = self.model, self.config
 
         # create the optimizer
@@ -135,7 +135,7 @@ class Trainer:
                 logger.info("test loss: %f", np.mean(losses))
 
         self.tokens = 0 # counter used for learning rate decay
-        for epoch in range(config.max_epochs):
+        for epoch in range(config.max_epochs - 612):
 
             run_epoch('train')
             if self.test_dataset is not None:
