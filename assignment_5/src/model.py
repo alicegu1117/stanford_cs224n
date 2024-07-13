@@ -91,7 +91,17 @@ class DownProjectBlock(nn.Module):
         super().__init__()
         ### YOUR CODE HERE
         ### Hint: Copy over the code from Block and make necessary modifications.
-        pass
+        self.ln1 = nn.LayerNorm(config.n_embd)
+        self.ln2 = nn.LayerNorm(config.n_embd)
+        self.attn = attention.CausalCrossAttention(config)
+        self.C = nn.Parameter(torch.empty(1, config.bottleneck_dim, config.n_embd)) # (1, bottleneck_dim, n_embd). using Xavier uniform initialization typically requires initializing the tensor with torch.empty.
+        nn.init.xaveir_uniform_(self.C) # Xavier uniform initialization is preferred over torch.randn for neural parameters as it helps in training the model faster.
+        self.mlp = nn.Sequential(
+            nn.Linear(config.n_embd, 4 * config.n_embd),
+            nn.GELU(),
+            nn.Linear(4 * config.n_embd, config.n_embd),
+            nn.Dropout(config.resid_pdrop),
+        )
         ### END YOUR CODE
 
     def forward(self, x_input):
@@ -101,7 +111,9 @@ class DownProjectBlock(nn.Module):
         ### YOUR CODE HERE
         ### Hint: Copy over the code from Block and make necessary modifications.
         ### Should be around 3-5 lines.
-        pass
+        y = x_input + self.attn(x_input, self.ln1(self.C))
+        y = y + self.mlp(self.ln2(y))
+        return y
         ### END YOUR CODE
     
     
@@ -116,7 +128,15 @@ class UpProjectBlock(nn.Module):
         super().__init__()
         ### YOUR CODE HERE
         ### Hint: Copy over the code from Block and make necessary modifications.
-        pass
+        self.ln1 = nn.LayerNorm(config.n_embd)
+        self.ln2 = nn.LayerNorm(config.n_embd)
+        self.attn = attention.CausalCrossAttention(config)
+        self.mlp = nn.Sequential(
+            nn.Linear(config.n_embd, 4 * config.n_embd),    # 4 * config.n_embd is an empirical value that proves to work by expanding the input to higher dimensional spaace to capture more information.
+            nn.GELU(),
+            nn.Linear(4 * config.n_embd, config.n_embd),
+            nn.Dropout(config.resid_pdrop),
+        ) 
         ### END YOUR CODE
     
     def forward(self, y, x_input):
@@ -127,7 +147,9 @@ class UpProjectBlock(nn.Module):
         ### YOUR CODE HERE
         ### Hint: Copy over the code from Block and make necessary modifications.
         ### Should be around 3-5 lines.
-        pass
+        y = y + self.attn(x_input, self.ln1(y))
+        y = y + self.mlp(self.ln2(y))
+        return y
         ### END YOUR CODE
     
 
@@ -138,8 +160,8 @@ class GPT(nn.Module):
         super().__init__()
 
         # input embedding stem
-        self.tok_emb = nn.Embedding(config.vocab_size, config.n_embd)
-        self.pos_emb = nn.Parameter(torch.zeros(1, config.block_size, config.n_embd))
+        self.tok_emb = nn.Embedding(config.vocab_size, config.n_embd)   # (vocab_size, n_embd)
+        self.pos_emb = nn.Parameter(torch.zeros(1, config.block_size, config.n_embd)) # (1, block_size, n_embd)
         self.drop = nn.Dropout(config.embd_pdrop)
         # transformer
         self.perceiver = config.perceiver
@@ -186,9 +208,9 @@ class GPT(nn.Module):
         assert t <= self.block_size, "Cannot forward, model block size (%d, %d) is exhausted." % (t, self.block_size)
 
         # forward the GPT model
-        token_embeddings = self.tok_emb(idx) # each index maps to a (learnable) vector
-        position_embeddings = self.pos_emb[:, :t, :] # each position maps to a (learnable) vector
-        x_input = self.drop(token_embeddings + position_embeddings)
+        token_embeddings = self.tok_emb(idx) # each index maps to a (learnable) vector (b, t, n_embd)
+        position_embeddings = self.pos_emb[:, :t, :] # each position maps to a (learnable) vector (1, t, n_embd)
+        x_input = self.drop(token_embeddings + position_embeddings) # broadcast position_embeddings. (b, t, n_embd)
         
         if self.perceiver:
             x = self.down_block(x_input)
