@@ -95,7 +95,7 @@ class DownProjectBlock(nn.Module):
         self.ln2 = nn.LayerNorm(config.n_embd)
         self.attn = attention.CausalCrossAttention(config)
         self.C = nn.Parameter(torch.empty(1, config.bottleneck_dim, config.n_embd)) # (1, bottleneck_dim, n_embd). using Xavier uniform initialization typically requires initializing the tensor with torch.empty.
-        nn.init.xaveir_uniform_(self.C) # Xavier uniform initialization is preferred over torch.randn for neural parameters as it helps in training the model faster.
+        nn.init.xavier_uniform_(self.C) # Xavier uniform initialization is preferred over torch.randn for neural parameters as it helps in training the model faster.
         self.mlp = nn.Sequential(
             nn.Linear(config.n_embd, 4 * config.n_embd),
             nn.GELU(),
@@ -111,7 +111,7 @@ class DownProjectBlock(nn.Module):
         ### YOUR CODE HERE
         ### Hint: Copy over the code from Block and make necessary modifications.
         ### Should be around 3-5 lines.
-        y = x_input + self.attn(x_input, self.ln1(self.C))
+        y = self.C + self.attn(x_input, self.ln1(self.C))
         y = y + self.mlp(self.ln2(y))
         return y
         ### END YOUR CODE
@@ -147,7 +147,7 @@ class UpProjectBlock(nn.Module):
         ### YOUR CODE HERE
         ### Hint: Copy over the code from Block and make necessary modifications.
         ### Should be around 3-5 lines.
-        y = y + self.attn(x_input, self.ln1(y))
+        y = x_input + self.attn(self.ln1(y), x_input)
         y = y + self.mlp(self.ln2(y))
         return y
         ### END YOUR CODE
@@ -211,17 +211,23 @@ class GPT(nn.Module):
         token_embeddings = self.tok_emb(idx) # each index maps to a (learnable) vector (b, t, n_embd)
         position_embeddings = self.pos_emb[:, :t, :] # each position maps to a (learnable) vector (1, t, n_embd)
         x_input = self.drop(token_embeddings + position_embeddings) # broadcast position_embeddings. (b, t, n_embd)
-        
+        # print(f"x_input: {x_input.shape}")
+        # print(f"self.C: {self.down_block.C.shape}")
+
         if self.perceiver:
             x = self.down_block(x_input)
         else:
             x = x_input
+
+        # print(f"x after down_block: {x.shape}")
         
         # always compute through the blocks
         x = self.blocks(x)
+        # print(f"x after blocks: {x.shape}")
         
         if self.perceiver:
             x = self.up_block(x, x_input)
+            # print(f"x after up_block: {x.shape}")
             
         x = self.ln_f(x)
         logits = self.head(x)
