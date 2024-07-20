@@ -160,7 +160,7 @@ class BertModel(BertPreTrainedModel):
 
     # Get word embedding from self.word_embedding into input_embeds.
     inputs_embeds = None
-    inputs_embeds = self.word_embedding[input_ids]  # (input_shape, hidden_size)
+    inputs_embeds = self.word_embedding(input_ids)  # (input_shape, hidden_size)
 
     # Get position index and position embedding from self.pos_embedding into pos_embeds.
     pos_ids = self.position_ids[:, :seq_length]
